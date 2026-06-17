@@ -82,6 +82,49 @@ async def test_add_document_payload_uses_chat_scope_and_custom_id() -> None:
     assert captured["payload"]["metadata"]["event_type"] == "dashboard.chat"
 
 
+@pytest.mark.asyncio
+async def test_create_memory_payload_uses_exact_memory_path() -> None:
+    client = make_client()
+    captured = {}
+
+    async def fake_post(path: str, payload: dict):
+        captured["path"] = path
+        captured["payload"] = payload
+        return {"documentId": "doc_123", "memories": [{"id": "mem_1"}]}
+
+    client._post = fake_post  # type: ignore[method-assign]
+    result = await client.create_memory(
+        "user: hello\nassistant: hi",
+        chat_id="abc",
+        metadata={"event_type": "dashboard.chat"},
+    )
+
+    assert result["ok"] is True
+    assert captured["path"] == "/v4/memories"
+    assert captured["payload"]["containerTag"] == "agentwasp:chat:abc"
+    assert captured["payload"]["memories"][0]["content"].startswith("user: hello")
+    assert captured["payload"]["memories"][0]["metadata"]["event_type"] == "dashboard.chat"
+
+
+@pytest.mark.asyncio
+async def test_list_memories_payload_uses_plural_container_tags() -> None:
+    client = make_client()
+    captured = {}
+
+    async def fake_post(path: str, payload: dict):
+        captured["path"] = path
+        captured["payload"] = payload
+        return {"memoryEntries": []}
+
+    client._post = fake_post  # type: ignore[method-assign]
+    result = await client.list_memories(chat_id="abc", limit=25)
+
+    assert result["memoryEntries"] == []
+    assert captured["path"] == "/v4/memories/list"
+    assert captured["payload"]["containerTags"] == ["agentwasp:chat:abc"]
+    assert captured["payload"]["limit"] == 25
+
+
 def test_supermemory_keys_are_redacted() -> None:
     key = "sm_" + "a" * 36
     assert key not in redact(f"SUPERMEMORY_API_KEY={key}")

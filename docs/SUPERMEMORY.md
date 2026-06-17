@@ -64,3 +64,27 @@ cd containers/agent-core
 MEDIA_SIGNING_DEBUG=true TIMEZONE=UTC DATABASE_URL=postgresql+asyncpg://wasp:wasp@localhost:5432/wasp_test \
   uv run --with-requirements requirements.txt python -m pytest tests/test_supermemory_backend.py -q
 ```
+
+## Benchmarking Supermemory vs internal memory
+
+See [`docs/MEMORY_BENCHMARKS.md`](MEMORY_BENCHMARKS.md) for the reproducible AgentWASP memory benchmark harness. It compares `internal`, `supermemory`, and `tandem` backends with the same local reader model and reports answer accuracy, retrieval support, contamination, latency, prompt size, and category-level results.
+
+The harness uses exact `/v4/memories` ingestion for benchmark facts because that path is deterministic and works with self-hosted/local Supermemory deployments even when document extraction agents are unavailable or weaker than the main reader model.
+
+## Switching and migration
+
+Memory Hub includes a **Memory Switchboard** preview. It shows how many local AgentWASP memories would be copied, estimated payload size, and available transfer directions:
+
+- `internal_to_supermemory`: copies local AgentWASP memories into scoped Supermemory exact memories without deleting local data.
+- `supermemory_to_internal`: imports listed Supermemory memories back into AgentWASP JSON/PostgreSQL memory for rollback/portability.
+
+The migration API is dry-run first:
+
+```bash
+curl -s http://localhost:8000/memory/api/supermemory/migration-preview
+curl -s -X POST http://localhost:8000/memory/api/supermemory/migrate \
+  -H 'Content-Type: application/json' \
+  -d '{"direction":"internal_to_supermemory","dry_run":true,"limit":500}'
+```
+
+Run destructive cleanup only as a separate explicit operator action; switching modes never deletes either memory system.

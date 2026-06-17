@@ -205,6 +205,22 @@ class SupermemoryClient:
                 raise
             return {"ok": False, "error": redact(str(exc))[:180]}
 
+    async def list_memories(
+        self,
+        *,
+        chat_id: str = "",
+        project_id: str | None = None,
+        limit: int = 100,
+        page: int = 1,
+    ) -> dict[str, Any]:
+        """List Supermemory memory entries for migration/audit previews."""
+        payload = {
+            "containerTags": [self.container_for(chat_id, project_id)],
+            "limit": max(1, min(int(limit or 100), 500)),
+            "page": max(1, int(page or 1)),
+        }
+        return await self._post("/v4/memories/list", payload)
+
     async def profile(self, query: str, *, chat_id: str = "", project_id: str | None = None) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "containerTag": self.container_for(chat_id, project_id),
