@@ -61,7 +61,10 @@ def _json_request(method: str, url: str, payload: dict[str, Any] | None = None, 
             body = json.loads(raw) if raw.strip() else {"error": raw}
         except json.JSONDecodeError:
             body = {"error": raw}
-        raise HttpError(f"{method} {url} failed with HTTP {exc.code}: {str(body)[:240]}") from exc
+        raise HttpError(f"{method} {url} failed with HTTP {exc.code} after {elapsed:.2f}s: {str(body)[:240]}") from exc
+    except (TimeoutError, urllib.error.URLError, OSError) as exc:
+        elapsed = time.perf_counter() - started
+        raise HttpError(f"{method} {url} failed after {elapsed:.2f}s: {type(exc).__name__}: {str(exc)[:180]}") from exc
 
 
 def _normalise(text: str) -> str:
@@ -159,9 +162,11 @@ def supermemory_container(run_tag: str, case_id: str, chat: str = "primary") -> 
     return f"{run_tag}:case:{case_id}:chat:{chat}"
 
 
-def seed_supermemory_case(base_url: str, api_key: str, run_tag: str, case: dict[str, Any], timeout: float) -> tuple[int, float]:
+def seed_supermemory_case(base_url: str, api_key: str, run_tag: str, case: dict[str, Any], timeout: float) -> tuple[int, float, int, list[str]]:
     started = time.perf_counter()
     count = 0
+    failures = 0
+    error_samples: list[str] = []
     for fact in case["facts"]:
         # Match AgentWASP Supermemory chat scope: one container per chat.
         container = supermemory_container(run_tag, case["id"], fact.get("chat", "primary"))
@@ -181,9 +186,14 @@ def seed_supermemory_case(base_url: str, api_key: str, run_tag: str, case: dict[
                 }
             ],
         }
-        _json_request("POST", f"{base_url.rstrip('/')}/v4/memories", payload, supermemory_headers(api_key), timeout=timeout)
-        count += 1
-    return count, time.perf_counter() - started
+        try:
+            _json_request("POST", f"{base_url.rstrip('/')}/v4/memories", payload, supermemory_headers(api_key), timeout=timeout)
+            count += 1
+        except Exception as exc:
+            failures += 1
+            if len(error_samples) < 3:
+                error_samples.append(str(exc).splitlines()[0][:220])
+    return count, time.perf_counter() - started, failures, error_samples
 
 
 def get_supermemory_context(base_url: str, api_key: str, run_tag: str, case: dict[str, Any], timeout: float, limit: int, budget_chars: int) -> tuple[str, float, dict[str, Any]]:
@@ -404,14 +414,27 @@ def main() -> int:
         print("Supermemory API key required for supermemory/tandem backends. Set SUPERMEMORY_API_KEY or run only --backends internal.", file=sys.stderr)
         return 2
 
-    seed_meta = {"seeded_memories": 0, "seed_latency_ms": 0.0}
+    seed_meta = {"seeded_memories": 0, "seed_latency_ms": 0.0, "seed_failures": 0, "seed_error_samples": []}
     if needs_sm and not args.skip_supermemory_seed:
         total_seeded = 0
+        total_seed_failures = 0
+        seed_error_samples: list[str] = []
         seed_started = time.perf_counter()
         for case in cases:
-            count, _elapsed = seed_supermemory_case(args.supermemory_base_url, args.supermemory_api_key, args.run_tag, case, args.supermemory_timeout)
+            count, _elapsed, failures, errors = seed_supermemory_case(args.supermemory_base_url, args.supermemory_api_key, args.run_tag, case, args.supermemory_timeout)
             total_seeded += count
-        seed_meta = {"seeded_memories": total_seeded, "seed_latency_ms": round((time.perf_counter() - seed_started) * 1000, 2)}
+            total_seed_failures += failures
+            for error in errors:
+                if len(seed_error_samples) < 5:
+                    seed_error_samples.append(error)
+        seed_meta = {
+            "seeded_memories": total_seeded,
+            "seed_latency_ms": round((time.perf_counter() - seed_started) * 1000, 2),
+            "seed_failures": total_seed_failures,
+            "seed_error_samples": seed_error_samples,
+        }
+        if total_seed_failures:
+            print(f"WARNING: Supermemory seed had {total_seed_failures} failed writes; continuing so internal/degraded backends still produce a report.", file=sys.stderr)
 
     rows: list[dict[str, Any]] = []
     for case in cases:

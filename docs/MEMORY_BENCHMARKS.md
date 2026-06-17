@@ -27,6 +27,7 @@ The benchmark records:
 - context character count and model token usage;
 - retrieval latency p50/p95;
 - generation latency p50/p95;
+- Supermemory seed counts/failures and redacted error samples;
 - category breakdowns for long-horizon recall, temporal updates, stale memory, multi-hop, scope isolation, abstention, and distractor robustness.
 
 ## Run locally with Gemma on Olympus
@@ -47,6 +48,8 @@ Outputs are written under `containers/agent-core/benchmark-results/` as:
 - `results.json` — machine-readable full output;
 - `results.csv` — spreadsheet-friendly rows;
 - `report.md` — summary tables suitable for PR discussion or website drafting.
+
+The harness records Supermemory write failures in `seed_failures` and treats retrieval timeouts as `[SUPERMEMORY CONTEXT UNAVAILABLE]` instead of crashing the full run. This lets internal-only/degraded results still produce a report when a local Supermemory daemon stalls.
 
 ## Scientific caveats
 
