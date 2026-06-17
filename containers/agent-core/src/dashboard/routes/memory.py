@@ -134,8 +134,13 @@ async def memory_list(
             kg_node_names = {n.id: n.name for n in kg_nodes}
             kg_node_names.update({row.id: row.name for row in extra_nodes})
 
+    if getattr(memory, "backend", "internal") == "supermemory":
+        stats = memory.get_stats()
+
     return request.app.state.templates.TemplateResponse(request, "memory.html", {
         "stats":         stats,
+        "memory_backend": getattr(memory, "backend", "internal"),
+        "supermemory_status": memory.supermemory_status() if hasattr(memory, "supermemory_status") else {},
         "current_type":  type,
         "search":        search,
         "page":          page,

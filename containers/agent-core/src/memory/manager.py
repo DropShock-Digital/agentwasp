@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 
 import structlog
@@ -24,12 +25,36 @@ class MemoryManager:
     """
 
     def __init__(self):
+        from ..config import settings
+        from .supermemory_client import SupermemoryClient
+
+        self.backend = str(getattr(settings, "memory_backend", "internal") or "internal").lower()
         self.store = MemoryStore()
         self.index = MemoryIndex()
         self.snapshots = SnapshotManager(self.store)
         self.promotion = PromotionEngine(self)
         self.forgetting = ForgettingEngine(self)
         self.context_builder = ContextBuilder(self)
+        self.supermemory = SupermemoryClient.from_settings(settings)
+
+    @property
+    def use_internal_store(self) -> bool:
+        return self.backend in {"internal", "tandem"}
+
+    @property
+    def use_supermemory(self) -> bool:
+        return self.backend in {"supermemory", "tandem"}
+
+    async def supermemory_context(self, user_text: str, chat_id: str = "", project_id: str | None = None) -> str:
+        if not self.use_supermemory:
+            return ""
+        return await self.supermemory.format_context(user_text, chat_id=chat_id, project_id=project_id)
+
+    def supermemory_status(self) -> dict:
+        status = self.supermemory.status()
+        status["backend"] = self.backend
+        status["mode"] = "supermemory-only" if self.backend == "supermemory" else self.backend
+        return status
 
     async def store_memory(
         self,
@@ -57,9 +82,42 @@ class MemoryManager:
             source=source,
         )
 
+        if self.backend == "supermemory":
+            await self.supermemory.create_memory(
+                summary or json.dumps(content, ensure_ascii=False),
+                project_id=project_id,
+                metadata={
+                    "memory_type": memory_type.value,
+                    "tags": ",".join(tags or []),
+                    "source": source,
+                    "importance": importance,
+                },
+                is_static=memory_type in {MemoryType.FACTS, MemoryType.POLICY},
+            )
+            logger.info(
+                "memory.supermemory_only_stored",
+                memory_type=memory_type,
+                summary=summary[:80] if summary else "",
+            )
+            return entry
+
         file_path = self.store.write(entry)
         content_hash = self.store.content_hash(entry)
         await self.index.upsert(session, entry, file_path, content_hash)
+
+        if self.backend == "tandem" and memory_type != MemoryType.EPISODIC:
+            await self.supermemory.create_memory(
+                summary or json.dumps(content, ensure_ascii=False),
+                project_id=project_id,
+                metadata={
+                    "memory_type": memory_type.value,
+                    "tags": ",".join(tags or []),
+                    "source": source,
+                    "importance": importance,
+                    "internal_memory_id": entry.id,
+                },
+                is_static=memory_type in {MemoryType.FACTS, MemoryType.POLICY},
+            )
 
         logger.info(
             "memory.stored",
@@ -105,6 +163,20 @@ class MemoryManager:
         self, session: AsyncSession, query: MemoryQuery
     ) -> list[MemoryContent]:
         """Search memory using the PostgreSQL index, then load from filesystem."""
+        if self.backend == "supermemory":
+            query_text = query.text_search or (query.memory_type.value if query.memory_type else "recent memory")
+            block = await self.supermemory.format_context(query_text, project_id=query.project_id)
+            if not block:
+                return []
+            return [MemoryContent(
+                memory_type=query.memory_type or MemoryType.SEMANTIC,
+                project_id=query.project_id,
+                tags=query.tags + ["supermemory"],
+                summary=block[:240],
+                content={"source": "supermemory", "text": block},
+                source="supermemory",
+            )]
+
         rows = await self.index.search(session, query)
         entries = []
         for row in rows:
@@ -203,6 +275,44 @@ class MemoryManager:
         content is lost. Each chunk references the original turn via tags.
         Automatically triggers the PromotionEngine to scan for recurring topics.
         """
+        if self.backend == "supermemory":
+            timestamp = datetime.now(timezone.utc).isoformat()
+            content_text = (
+                f"event_type: {event_type}\n"
+                f"user_id: {user_id}\n"
+                f"chat_id: {chat_id}\n"
+                f"timestamp: {timestamp}\n\n"
+                f"user: {user_input}\nassistant: {agent_response}"
+            )
+            entry = MemoryContent(
+                memory_type=MemoryType.EPISODIC,
+                tags=list(tags or ["conversation"]) + ([f"chat:{chat_id}"] if chat_id else []),
+                summary=f"User: {user_input[:120]}",
+                content={
+                    "event_type": event_type,
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "user_input": user_input,
+                    "agent_response": agent_response,
+                    "timestamp": timestamp,
+                    "supermemory_only": True,
+                },
+                importance_score=self._compute_importance(user_input, agent_response, skills_used),
+                source="supermemory",
+            )
+            await self.supermemory.add_document(
+                content_text,
+                chat_id=chat_id,
+                custom_id=f"agentwasp:{chat_id}:{entry.id}" if chat_id else f"agentwasp:{entry.id}",
+                metadata={
+                    "event_type": event_type,
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "skills_used": ",".join(skills_used or []),
+                },
+            )
+            return entry
+
         all_tags = list(tags or ["conversation"])
         if skills_used:
             all_tags.append("skill_used")
@@ -299,6 +409,26 @@ class MemoryManager:
             except Exception:
                 logger.warning("memory.promotion_analysis_failed", entry_id=last_entry.id)
 
+        if self.backend == "tandem" and last_entry:
+            await self.supermemory.add_document(
+                (
+                    f"event_type: {event_type}\n"
+                    f"user_id: {user_id}\n"
+                    f"chat_id: {chat_id}\n"
+                    f"timestamp: {timestamp}\n\n"
+                    f"user: {user_input}\nassistant: {agent_response}"
+                ),
+                chat_id=chat_id,
+                custom_id=f"agentwasp:{chat_id}:{last_entry.id}" if chat_id else f"agentwasp:{last_entry.id}",
+                metadata={
+                    "event_type": event_type,
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "internal_memory_id": last_entry.id,
+                    "skills_used": ",".join(skills_used or []),
+                },
+            )
+
         return last_entry
 
     async def get_context_packet(
@@ -316,9 +446,19 @@ class MemoryManager:
 
     def get_stats(self) -> dict:
         """Get memory statistics."""
-        stats = {"total": self.store.count(), "size_bytes": self.store.total_size_bytes()}
+        if self.backend == "supermemory":
+            stats: dict = {"total": 0, "size_bytes": 0}
+            for mt in MemoryType:
+                stats[mt.value] = 0
+            stats["backend"] = "supermemory"
+            stats["supermemory"] = self.supermemory_status()
+            return stats
+
+        stats: dict = {"total": self.store.count(), "size_bytes": self.store.total_size_bytes()}
         for mt in MemoryType:
             stats[mt.value] = self.store.count(mt)
+        stats["backend"] = self.backend
+        stats["supermemory"] = self.supermemory_status()
         return stats
 
     def create_snapshot(self, label: str, trigger: str = "manual") -> SnapshotInfo:
