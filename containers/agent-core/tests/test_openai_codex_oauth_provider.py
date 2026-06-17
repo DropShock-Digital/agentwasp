@@ -30,6 +30,22 @@ class _HealthyFallbackProvider(LLMProvider):
         return ModelResponse(content="fallback", model_used="fallback-model", provider="fallback-test")
 
 
+class _HealthyFailingCodexProvider(LLMProvider):
+    fail_closed_on_unhealthy = True
+
+    def provider_name(self) -> str:
+        return "openai-codex"
+
+    def available_models(self) -> list[str]:
+        return ["gpt-4o-mini"]
+
+    async def health_check(self) -> bool:
+        return True
+
+    async def generate(self, request: ModelRequest) -> ModelResponse:
+        raise RuntimeError("simulated codex 401 during generation")
+
+
 @pytest.mark.asyncio
 async def test_codex_oauth_provider_fails_closed_without_token() -> None:
     provider = OpenAICodexOAuthProvider(access_token="")
@@ -116,6 +132,22 @@ async def test_active_codex_auth_failure_refuses_fallback() -> None:
     manager.active_model = "gpt-4o-mini"
 
     with pytest.raises(RuntimeError, match="refusing fallback"):
+        await manager.generate(ModelRequest(messages=[Message(role="user", content="hello")]))
+
+    assert fallback.called is False
+
+
+@pytest.mark.asyncio
+async def test_active_codex_generation_failure_refuses_fallback() -> None:
+    codex = _HealthyFailingCodexProvider()
+    fallback = _HealthyFallbackProvider()
+    manager = ModelManager()
+    manager.providers = {"openai-codex": codex, "fallback-test": fallback}
+    manager.fallback_order = ["openai-codex", "fallback-test"]
+    manager.active_provider = "openai-codex"
+    manager.active_model = "gpt-4o-mini"
+
+    with pytest.raises(RuntimeError, match="failed during generation"):
         await manager.generate(ModelRequest(messages=[Message(role="user", content="hello")]))
 
     assert fallback.called is False

@@ -62,7 +62,7 @@ This document is the **honest** map of what works, what's experimental, and what
 | Provider | Status | Notes |
 |---|---|---|
 | `openai` (`OPENAI_API_KEY`) | Beta | API-key path is implemented through the OpenAI-compatible provider. |
-| `openai-codex` (`OPENAI_CODEX_ACCESS_TOKEN`) | Experimental | OAuth bearer-token mode is wired as a separate provider and fails closed when missing/expired. Refresh/browser login is not automated in this release; re-auth out-of-band and never paste cookies/session blobs into logs or issues. |
+| `openai-codex` (`OPENAI_CODEX_ACCESS_TOKEN`) | Experimental | OAuth bearer-token mode is wired as a separate provider and fails closed when missing/expired or failing during generation. Refresh/browser login is not automated in this release; the default `OPENAI_CODEX_BASE_URL` is conservative and may need an operator override for the real Codex OAuth surface. Re-auth out-of-band and never paste cookies/session blobs into logs or issues. |
 
 ## Integrations
 

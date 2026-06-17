@@ -319,6 +319,14 @@ class ModelManager:
                         self.invalidate_health_cache(provider_name)
                         request.model = original_model
                         request.messages = original_messages
+                        if (
+                            provider_name == self.active_provider
+                            and getattr(provider, "fail_closed_on_unhealthy", False)
+                        ):
+                            raise RuntimeError(
+                                f"Active provider {provider_name} failed during generation; "
+                                "refusing fallback to avoid silently using another provider."
+                            ) from e
                         break  # Move to next provider
 
         raise RuntimeError("All LLM providers failed. No model available.")

@@ -177,6 +177,13 @@ class OpenAICodexOAuthProvider(LLMProvider):
         self._token_expires_at = _parse_expires_at(token_expires_at)
         self._account_label = account_label.strip()
         self._healthy = False
+        self._inner_provider = OpenAICompatibleProvider(
+            api_key=self._access_token,
+            base_url=self._base_url,
+            provider_label="openai-codex",
+            models=self._models,
+            default_model=self._default_model,
+        )
 
     def provider_name(self) -> str:
         return "openai-codex"
@@ -245,14 +252,7 @@ class OpenAICodexOAuthProvider(LLMProvider):
         # Delegate request formatting and OpenAI-compatible response parsing to
         # the battle-tested API-key provider, but keep the provider label and
         # auth status distinct.
-        inner = OpenAICompatibleProvider(
-            api_key=self._access_token,
-            base_url=self._base_url,
-            provider_label="openai-codex",
-            models=self._models,
-            default_model=self._default_model,
-        )
-        return await inner.generate(request)
+        return await self._inner_provider.generate(request)
 
 
 class OpenAICompatibleProvider(LLMProvider):
