@@ -1,3 +1,56 @@
+
+<!-- README-ROAST:START -->
+
+## README Roast Pass
+
+Roasted with [https://github.com/hidai25/readme-roast](https://github.com/hidai25/readme-roast) on 2026-06-25. This block is evidence-only: repo metadata, root files, and the existing README were scanned before writing.
+
+### Fast roast
+
+- Pre-pass README score: **82/100** by the readme-roast categories: first impression, install friction, trust, visuals, and structure.
+- No clear H1 hero near the top.
+- Biggest fix in this pass: added a Mermaid repo map plus a quick operator scan without deleting the existing README content.
+
+### Mermaid repository map
+
+```mermaid
+flowchart TD
+  R["DropShock-Digital/agentwasp"]
+  R --> N1["docker-compose.yml"]
+  R --> N2["README.md"]
+  R --> N3["docs/"]
+  R --> N4["scripts/"]
+  R --> N5["bin/"]
+  R --> N6["containers/"]
+  R --> N7["docs-site/"]
+  R --> N8["lib/"]
+  R --> N9[".env.example"]
+  R --> N10["CHANGELOG.md"]
+  R --> N11["CODE_OF_CONDUCT.md"]
+  R --> N12["install.ps1"]
+  R --> MORE["additional repo files"]
+```
+
+### Operator quick scan
+
+| Signal | Evidence |
+|---|---|
+| GitHub repo | [DropShock-Digital/agentwasp](https://github.com/DropShock-Digital/agentwasp) |
+| Description | The agent runtime built to operate. |
+| Default branch | `main` |
+| Primary languages | Python 79%, HTML 18%, Shell 1%, CSS 1%, JavaScript 0% |
+| Install path | Not detected from root files |
+| Run/build hint | Not detected from root files |
+| Key files scanned | docker-compose.yml, README.md, docs/, scripts/ |
+
+### README next upgrades
+
+- Add real screenshots, GIFs, or CLI output once the repo has a stable demo path.
+- Pin exact setup commands after verifying them in a clean environment.
+- Link production/staging/docs only when the URL is durable and intended for readers.
+
+<!-- README-ROAST:END -->
+
 <div align="center">
 
 <img src=".github/assets/logo.png" alt="WASP" width="420" />
