@@ -30,6 +30,17 @@
   <span class="text-xs text-base-content/20 font-mono">Flags stored in Redis — most apply live, restart required for subsystems</span>
 </div>
 
+  <!-- ── Appearance: browser-local palette preference, no runtime action ─── -->
+  <div class="card bg-base-100 shadow-sm wasp-accent">
+    <div class="card-body p-5">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div><div class="flex items-center gap-2"><span class="font-semibold text-sm">Dashboard appearance</span><span class="badge badge-ghost badge-sm">local preference</span></div><p class="mt-1 text-xs leading-relaxed text-base-content/45">Changes colors in this signed-in browser only. It does not alter the runtime, provider, permissions, or any agent behavior.</p></div>
+        <label class="form-control w-full sm:w-56"><span class="sr-only">Dashboard colors</span><select id="wasp-palette-settings" data-palette-picker onchange="setDashboardPalette(this.value)" class="select select-bordered select-sm"><option value="hermes">Hermes blue</option><option value="slate">Slate</option><option value="violet">Violet</option><option value="forest">Forest</option></select></label>
+      </div>
+      <script nonce="{{ request.state.csp_nonce }}">document.getElementById('wasp-palette-settings').value = localStorage.getItem('wasp-palette') || 'hermes';</script>
+    </div>
+  </div>
+
 <div class="flex flex-col gap-5">
 
   <!-- ── Row 1: prime.md editor ─────────────────────────────────────────── -->
