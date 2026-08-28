@@ -23,6 +23,8 @@
         (function() {
             var saved = localStorage.getItem('wasp-theme');
             if (saved) document.documentElement.setAttribute('data-theme', saved);
+            var palette = localStorage.getItem('wasp-palette') || 'hermes';
+            document.documentElement.setAttribute('data-wasp-palette', palette);
         })();
     </script>
     <script nonce="{{ request.state.csp_nonce }}">
@@ -33,6 +35,11 @@
             html.setAttribute('data-theme', next);
             localStorage.setItem('wasp-theme', next);
             updateThemeIcon(next);
+        }
+        function setDashboardPalette(value) {
+            document.documentElement.setAttribute('data-wasp-palette', value);
+            localStorage.setItem('wasp-palette', value);
+            document.querySelectorAll('[data-palette-picker]').forEach(function(el) { el.value = value; });
         }
         function updateThemeIcon(theme) {
             document.querySelectorAll('.theme-sun').forEach(function(el) { el.classList.toggle('hidden', theme === 'wasp-light'); });
@@ -263,7 +270,16 @@
 
 
             <!-- Bottom: controls -->
-            <div class="px-3 py-1.5 border-t border-base-300/50 flex items-center justify-end gap-1">
+            <div class="px-3 py-1.5 border-t border-base-300/50 flex items-center justify-between gap-1">
+                <label class="sr-only" for="wasp-palette">Dashboard colors</label>
+                <select id="wasp-palette" data-palette-picker onchange="setDashboardPalette(this.value)" class="select select-xs max-w-[112px] bg-base-200/60 text-xs text-base-content/60" title="Dashboard colors">
+                    <option value="hermes">Hermes blue</option>
+                    <option value="slate">Slate</option>
+                    <option value="violet">Violet</option>
+                    <option value="forest">Forest</option>
+                </select>
+                <script nonce="{{ request.state.csp_nonce }}">document.getElementById('wasp-palette').value = localStorage.getItem('wasp-palette') || 'hermes';</script>
+                <div class="flex items-center gap-1">
                 <a href="/reset" title="Panic Reset — erase agent brain" class="btn btn-ghost btn-sm btn-circle text-error/50 hover:text-error hover:bg-error/10">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
@@ -284,6 +300,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                     Logout
                 </a>
+                </div>
             </div>
         </aside>
     </div>
